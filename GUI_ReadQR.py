@@ -61,7 +61,7 @@ def main():
                 if dec_inf == '':
                     continue
 
-                if Image_preview == 1:
+                if Image_preview == 0:
                     # QRコードの枠線を描画
                     frame = cv2.polylines(frame, [point], True, (0, 255, 0), 2, cv2.LINE_AA)
 
