@@ -1,14 +1,21 @@
 import numpy as np
 import cv2
+from picamera2 import Picamera2
 import time
 
 # QRコード一辺の長さ
 marker_size = 0.03 # [m]
+
 # カメラの内部パラメータと歪み係数(chess boardから取得)
-camera_matrix = np.array([[786.38858756 ,  0.         ,351.02240753],
-                          [  0.         ,788.85699087 ,260.48178893],
-                          [  0.         ,  0.         ,  1.        ]])
-distortion_coeff = np.array([-0.03169828 ,-0.16365523  ,0.0051104  ,-0.00278013  ,0.50978427])
+camera_matrix = np.array([[1.99927263e+03, 0.00000000e+00, 3.30848333e+02],
+                          [0.00000000e+00, 1.99806663e+03, 2.57552152e+02],
+                          [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
+
+distortion_coeff = np.array([-2.46051320e-01,
+                             3.25855770e+01,
+                             1.15522156e-02,
+                             6.92733918e-03,
+                            -7.35148202e+02])
 
 ## rvec -> rotation vector, tvec -> translation vector
 def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
@@ -40,14 +47,22 @@ def main():
     print("="*60)
     
     # -----------------------------------------------------------
-    # 画像キャプチャ
+    # PiCamera2での画像キャプチャ
     # -----------------------------------------------------------
-    # VideoCaptureインスタンス生成
-    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW) #for Win
-    # cap = cv2.VideoCapture(0) #for Ubuntu/Raspberry Pi
-    
-    if not cap.isOpened():
-        print("エラー: カメラを開けませんでした")
+    try:
+        # PiCamera2インスタンス生成
+        picam2 = Picamera2()
+        
+        # カメラ設定（解像度を指定）
+        config = picam2.create_preview_configuration(main={"size": (640, 480)})
+        picam2.configure(config)
+        
+        # カメラ開始
+        picam2.start()
+        print("カメラを正常に開始しました")
+        
+    except Exception as e:
+        print(f"エラー: カメラを開けませんでした - {e}")
         return
     
     # QRCodeDetectorインスタンス生成
@@ -57,10 +72,11 @@ def main():
     
     try:
         while True:
-            ret, frame = cap.read()
-            if not ret:
-                print("フレームの取得に失敗しました")
-                break
+            # PiCamera2でフレームを取得
+            frame = picam2.capture_array()
+            
+            # 色変換（PiCamera2はRGB、OpenCVはBGRを期待）
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             
             frame_count += 1
             current_time = time.time()
@@ -68,7 +84,7 @@ def main():
             # QRコードデコード
             retval, decoded_info, points, straight_qrcode = qrd.detectAndDecodeMulti(frame)
 
-            # 待機状態の表示（10フレームごと）
+            # 待機状態の表示（30フレームごと）
             if frame_count % 30 == 0 and not retval:
                 print("QRコードを待機中...", end='\r')
             
@@ -167,10 +183,13 @@ def main():
     except Exception as e:
         print(f"エラーが発生しました: {e}")
     finally:
-        # キャプチャリソースリリース
-        cap.release()
-        cv2.destroyAllWindows()
-        print("リソースを解放しました")
+        # PiCamera2リソースリリース
+        try:
+            picam2.stop()
+            cv2.destroyAllWindows()
+            print("リソースを解放しました")
+        except:
+            pass
 
 #実行
 if __name__ == '__main__':
