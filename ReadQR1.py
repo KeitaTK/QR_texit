@@ -1,3 +1,4 @@
+# QRコードを読み込んでテキストを表示
 import numpy as np
 import cv2
 from picamera2 import Picamera2

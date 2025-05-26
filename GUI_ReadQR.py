@@ -1,3 +1,4 @@
+# QRコードを読み込んで位置と姿勢を表示
 import numpy as np
 import cv2
 from picamera2 import Picamera2
