@@ -8,7 +8,7 @@ import numpy as np
 marker_size = 0.03
 
 # リアルタイムの画像表示の有り無し
-Image_preview = 1  # 画像の表示をする場合は1,しない場合(light)は0
+Image_preview = 0  # 画像の表示をする場合は1,しない場合(light)は0
 
 # カメラの内部パラメータ
 camera_matrix = np.array([
