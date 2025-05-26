@@ -6,7 +6,7 @@ import time
 # QRコード一辺の長さ
 marker_size = 0.03 # [m]
 
-# カメラの内部パラメータと歪み係数(chess boardから取得)
+# カメラの内部パラメータと歪み係数
 camera_matrix = np.array([[1.99927263e+03, 0.00000000e+00, 3.30848333e+02],
                           [0.00000000e+00, 1.99806663e+03, 2.57552152e+02],
                           [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]])
@@ -17,7 +17,6 @@ distortion_coeff = np.array([-2.46051320e-01,
                              6.92733918e-03,
                             -7.35148202e+02])
 
-## rvec -> rotation vector, tvec -> translation vector
 def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
     marker_points = np.array([[-marker_size / 2, marker_size / 2, 0],
                               [marker_size / 2, marker_size / 2, 0],
@@ -35,29 +34,20 @@ def my_estimatePoseSingleMarkers(corners, marker_size, mtx, distortion):
     return rvecs, tvecs, trash
 
 def main():
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    
     # 前回検出したQRコードを記録（重複表示防止）
     last_detected_qr = ""
     last_detection_time = 0
     detection_cooldown = 1.0  # 1秒間のクールダウン
     
-    print("QRコード検出システムを開始しています...")
-    print("'q'キーを押すと終了します")
+    print("QRコード検出システムを開始しています（ヘッドレスモード）...")
+    print("Ctrl+Cを押すと終了します")
     print("="*60)
     
-    # -----------------------------------------------------------
-    # PiCamera2での画像キャプチャ
-    # -----------------------------------------------------------
     try:
         # PiCamera2インスタンス生成
         picam2 = Picamera2()
-        
-        # カメラ設定（解像度を指定）
         config = picam2.create_preview_configuration(main={"size": (640, 480)})
         picam2.configure(config)
-        
-        # カメラ開始
         picam2.start()
         print("カメラを正常に開始しました")
         
@@ -95,7 +85,7 @@ def main():
                     if dec_inf == '':
                         continue
                     
-                    # 重複検出防止（同じQRコードを短時間で連続検出した場合）
+                    # 重複検出防止
                     if (dec_inf == last_detected_qr and 
                         current_time - last_detection_time < detection_cooldown):
                         continue
@@ -104,29 +94,16 @@ def main():
                     last_detected_qr = dec_inf
                     last_detection_time = current_time
                     
-                    # QRコード各頂点座標を取得
-                    x, y = point[0][0], point[0][1]
-
-                    #頂点座標から距離,角度計算
+                    # 姿勢推定
                     rvec, tvec,_ = my_estimatePoseSingleMarkers(points, marker_size, camera_matrix, distortion_coeff)
                     
-                    # < rodoriguesからeuluerへの変換 >
-                    # 不要なaxisを除去
                     tvec = np.squeeze(tvec)
                     rvec = np.squeeze(rvec)
-                    
-                    # 回転ベクトルからrodoriguesへ変換
                     rvec_matrix = cv2.Rodrigues(rvec)
-                    rvec_matrix = rvec_matrix[0] # rodoriguesから抜き出し
-                    
-                    # 並進ベクトルの転置
+                    rvec_matrix = rvec_matrix[0]
                     transpose_tvec = tvec[np.newaxis, :].T
-                    
-                    # 合成
                     proj_matrix = np.hstack((rvec_matrix, transpose_tvec))
-                    
-                    # オイラー角への変換
-                    euler_angle = cv2.decomposeProjectionMatrix(proj_matrix)[6] # [deg]
+                    euler_angle = cv2.decomposeProjectionMatrix(proj_matrix)[6]
                     
                     # コンソールに情報を表示
                     print("\n" + "="*60)
@@ -143,54 +120,42 @@ def main():
                     print(f"  yaw  : {euler_angle[2][0]:.2f} [deg]")
                     print(f"頂点座標: {point}")
 
-                    # 条件分岐（情報表示のみ）
+                    # 条件分岐
                     if dec_inf == "turn_right":
                         print("📍 QRコードの種類: turn_right")
                         print("🔄 アクション: 右回転指示")
-                        frame = cv2.putText(frame, "Turn Right", (x, y - 10), font, 0.7, (255, 0, 0), 2, cv2.LINE_AA)
-
                     elif dec_inf == "turn_left":
                         print("📍 QRコードの種類: turn_left")
                         print("🔄 アクション: 左回転指示")
-                        frame = cv2.putText(frame, "Turn Left", (x, y - 10), font, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
-
                     elif dec_inf == "stop_end":
                         print("📍 QRコードの種類: stop_end")
                         print("🛑 アクション: 停止指示")
-                        frame = cv2.putText(frame, "Stop End", (x, y - 10), font, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
-
                     else:
                         print("📍 QRコードの種類: その他")
                         print("❓ アクション: 不明なQRコード")
-                        frame = cv2.putText(frame, "Unknown QR", (x, y - 10), font, 0.7, (255, 255, 0), 2, cv2.LINE_AA)
 
                     print("="*60)
                     print("QRコードを待機中...")
                     
-                    # QRコードに枠線を描画
-                    frame = cv2.polylines(frame, [point], True, (0, 255, 0), 2, cv2.LINE_AA)
-                    
-            # 画像表示
-            cv2.imshow('QR Code Detection', frame)
+                    # 画像をファイルに保存（オプション）
+                    # cv2.imwrite(f'qr_detected_{int(time.time())}.jpg', frame)
             
-            # Qキーを押して終了
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                print("\nプログラムを終了します...")
-                break
+            # GUI表示は削除（ヘッドレスモード）
+            # cv2.imshow('QR Code Detection', frame)  # この行をコメントアウト
+            
+            # 短い待機
+            time.sleep(0.1)
                 
     except KeyboardInterrupt:
         print("\nキーボード割り込みでプログラムを終了します...")
     except Exception as e:
         print(f"エラーが発生しました: {e}")
     finally:
-        # PiCamera2リソースリリース
         try:
             picam2.stop()
-            cv2.destroyAllWindows()
             print("リソースを解放しました")
         except:
             pass
 
-#実行
 if __name__ == '__main__':
     main()
